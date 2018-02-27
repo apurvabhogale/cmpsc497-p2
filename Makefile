@@ -8,6 +8,7 @@
 #LIBDIRS=-L. -L/opt/local/lib
 #INCLUDES=-I. -I/opt/local/include
 CC=afl-2.52b/afl-gcc
+#CC=gcc
 CFLAGS=-c $(INCLUDES) -g -Wall 
 LINK=gcc -g
 LDFLAGS=$(LIBDIRS)
