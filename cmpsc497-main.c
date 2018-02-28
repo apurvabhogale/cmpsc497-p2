@@ -173,24 +173,27 @@ int set_password( char *username, char *password )
 	passlen=strlen(password);
 	
 	unsigned char *str = (unsigned char *)malloc(HASH_LEN);
+	char *user=(char *)malloc(NAME_LEN);
 	hash = (unsigned char *)malloc(HASH_LEN);
 	memset(hash, 0, HASH_LEN);
 	memset(str, 0, HASH_LEN);
+	memset(user, 0, NAME_LEN);
+	memset(salt, 0, SALT_LEN);
+	memcpy(user, username, strlen(username));
 
 	RAND_bytes((unsigned char *)salt, SALT_LEN);//create a random buffer
 	
 	
-	strcpy(str, salt);
-
-	strncat(str, password, passlen);
-	
+	memcpy(str, salt, SALT_LEN);
+	memcpy(str+strlen(salt), password, passlen);
+	//strncat(str, password, passlen);
 	//str[HASH_LEN-1] = '\0';
 	//creating a hash out of the combo of the salt and the password
 	//storing it in hash variable
 	digest_message(str, HASH_LEN,  &hash, &hashsize);
 	hash[HASH_LEN] = '\0';
 
-	kvs_auth_set(Passwds, username, hash, &salt);
+	kvs_auth_set(Passwds, user, hash, &salt);
 	
 	return 0;
 }
@@ -243,25 +246,28 @@ int authenticate_user( char *username, char *password )
 	saltAndPass=(unsigned char *)malloc(HASH_LEN);
 	check = (unsigned char *)malloc(HASH_LEN);
 	storedHash = (unsigned char *)malloc(HASH_LEN);
+	salt = (unsigned char *)malloc(SALT_LEN);
 	
 	memset(saltAndPass, 0, HASH_LEN);
+	memset(salt, 0, SALT_LEN);
 	memset(check, 0, HASH_LEN);
 	memset(storedHash, 0, HASH_LEN);
-	
+	memset(storedHash, 0, HASH_LEN);
 	//get password length
 	passlen=strlen(password);
 	
 	//get stored hash in passwds kvs based on username and salt
 	kvs_auth_get(Passwds, username, &storedHash, &salt);
-	
+
 	//copy salt & password combo into a char pointer
-	strcpy(saltAndPass, salt);
-	strncat(saltAndPass, password, passlen);
+	memcpy(saltAndPass, salt, SALT_LEN);
+	memcpy(saltAndPass+strlen(salt), password, passlen);
+	//strncat(saltAndPass, password, passlen);
 	
 	//create a hash using digest_message
 	digest_message(saltAndPass, HASH_LEN,  &check, &hashsize);
-	check[HASH_LEN] = '\0';
-
+	check[HASH_LEN-1] = '\0';
+	//printf("%s", check)
 
 	//check if what's returned from digest and storedHash are the same
 	if(memcmp(check, storedHash, strlen(check))==0){
@@ -293,8 +299,8 @@ int set_object( char *filename, char *username, char *password )
 	struct A *objA;
 	objA=malloc(OBJ_LEN);
 	char *lineone;
-	char *token;
-	char *check;	
+	char *token, *token2;
+	char *check, line[LINE_SIZE];	
 	unsigned char *usnm = malloc(NAME_LEN);
 	FILE *fp;
 	char s[2] = " ";
@@ -302,9 +308,12 @@ int set_object( char *filename, char *username, char *password )
 	lineone = malloc(LINE_SIZE);
 	memset(chid, 0, KEY_LEN);
 	memset(usnm, 0, NAME_LEN);
+	memset(line, 0, LINE_SIZE);
+	//memset(check, 0, NAME_LEN);
 	memset(lineone, 0, LINE_SIZE);
+	memcpy(usnm, username, strlen(username));
 
-	if(authenticate_user(username, password)==0){
+	if(authenticate_user(usnm, password)==0){
 		printf("Authorization unsuccessful. Exiting now...\n");
 		return 1;
 	}
@@ -315,12 +324,13 @@ int set_object( char *filename, char *username, char *password )
 		printf("File open error. Exiting now...\n");
 		return 1;
 	}
-
+	
+	//fgets(lineone, size, fp);
 	getline(&lineone, &size, fp);
 	//free(lineone);
 	fclose(fp);
 
-
+	
 	token=strtok(lineone, s);
 
 	
@@ -329,22 +339,23 @@ int set_object( char *filename, char *username, char *password )
 		token=strtok(NULL,s);
 	}
 	check[strlen(check)-1]='\0';
-
-	id=	atoi(check); 
-	if(id==0){
-		printf("obj id not int\n");
-		return -1;
-	}
-	
 	memcpy(chid, check, strlen(check));
-	memcpy(usnm, username, strlen(username));
+	
+	
+	/*
+	//lineone[strlen(lineone)-1]='\0';
+	memcpy(line, lineone, strlen(lineone));
+	sscanf(line, "%s %s %d", token, token2, &id);
+	sprintf(chid, "%d", id);
+	puts(chid);
+	
+	*/
 
 	fp=NULL;
 	fp=fopen(filename, "r");
 	//check if id int
 	objA=upload_A(fp, filename);
-	printf("chid: %s", chid);
-	printf("\n usnm: %s", usnm);
+	
 	//printf("\nOBJECT A%s\n",  objA->num_a);
 
 	if(objA==NULL){
@@ -380,11 +391,15 @@ int get_object( char *username, char *password, char *id )
 {
 	unsigned char *key = (unsigned char *)malloc(KEY_LEN);
 	unsigned char *name, *obj;
+	char *user=(char *)malloc(NAME_LEN);
+	memset(user, 0, NAME_LEN);
+	memcpy(user, username, strlen(username));
 	int rc;
+	
 
 	struct A *objA;
 
-	if ( !authenticate_user( username, password )) {
+	if ( !authenticate_user( user, password )) {
 		fprintf(stderr, "get_object authentication failed %s:%s\n", username, password );
 		return -1;
 	}
@@ -434,17 +449,18 @@ struct A *upload_A( FILE *fp , char *filename)
 	struct A *objA;
 	
 	objA=malloc(sizeof(struct A));
-	
+	int test;
 	memset(objA, 0, sizeof(struct A));
 
 
 	long offset;
 
-	char *sname, *obj_id, *name, *value, *token;
-	char s[2]=" ", line[LINE_SIZE];
-	int lineone=0, fieldcount = 0, Afields=6;
-
+	char *sname, *obj_id, *name, *value, *token, *line, lineArr[LINE_SIZE];
+	char s[2]=" ";
+	int lineone=0, fieldcount = 0, Afields=6, linesize=LINE_SIZE, read;
+	line=malloc(LINE_SIZE);
 	memset(line, 0, LINE_SIZE);
+	memset(lineArr, 0, LINE_SIZE);
 	//check fp validity
 	if(fp==NULL){
 		printf("File pointer error in upload. Exiting now...\n");
@@ -456,14 +472,18 @@ struct A *upload_A( FILE *fp , char *filename)
 	}
 
 	//get the first line in the file
-	fgets(line, LINE_SIZE, fp);
+	//fgets(line, LINE_SIZE, fp);
+	getline(&line, &linesize, fp);
+	
 	//fclose(fp);
 
-
+	int count=0;
 	lineone=1;
 
 		do{
+			count = count +1;
 
+			
 			//get the first token from the line stored in line
 			//memset(line, '\0', LINE_SIZE);
 			token = strtok(line, s);
@@ -477,6 +497,9 @@ struct A *upload_A( FILE *fp , char *filename)
 			
 			//get the obj ID
 			obj_id=strtok(NULL,s);
+			
+
+
 
 			//fixing crash 1
 			//if the first word is not the word field
@@ -509,7 +532,7 @@ struct A *upload_A( FILE *fp , char *filename)
 			if(strcmp(sname, "A") == 0 && strcmp(token, "struct")==0){
 				//get the next line, should be field
 				memset(line, 0, LINE_SIZE);
-				while(fgets(line, LINE_SIZE, fp)){
+				while(getline(&line, &linesize, fp)){
 					
 
 					token=strtok(line, s);
@@ -577,7 +600,7 @@ struct A *upload_A( FILE *fp , char *filename)
 				}
 			}
 
-		}while(fgets(line, LINE_SIZE, fp)); //if none of the if's hit. i.e. if there isn't an error
+		}while((read=getline(&line, &linesize, fp))!=-1); //if none of the if's hit. i.e. if there isn't an error
 		//and if there isn't a "struct A", keep moving through the lines
 	//}
 	
@@ -604,10 +627,10 @@ struct B *upload_B( FILE *fp )
 	memset(objB, 0, sizeof(struct B));
 
 
-	char *sname, *obj_id, *name, *value, *token;
-	char s[2]=" ", line[LINE_SIZE];
-	int lineone=0, fieldcount = 0, Bfields=4;
-
+	char *sname, *obj_id, *name, *value, *token, *line;
+	char s[2]=" ";
+	int lineone=0, fieldcount = 0, Bfields=4, linesize=LINE_SIZE, read;
+	line=malloc(LINE_SIZE);
 	memset(line, 0, LINE_SIZE);
 	//check fp validity
 	if(fp==NULL){
@@ -620,7 +643,8 @@ struct B *upload_B( FILE *fp )
 	}
 	
 	//get the first line in the file
-	fgets(line, LINE_SIZE, fp);
+	//fgets(line, LINE_SIZE, fp);
+	getline(&line, &linesize, fp);
 	lineone=1;
 	int count =1;
 
@@ -674,7 +698,7 @@ struct B *upload_B( FILE *fp )
 			if(strncmp(sname, "B", 1) == 0 && strcmp(token, "struct")==0){
 				//get the next line, should be field
 				memset(line, 0, LINE_SIZE);
-				while(fgets(line, LINE_SIZE, fp)){
+				while(getline(&line, &linesize, fp)){
 					
 					token=strtok(line, s);
 					name = strtok(NULL, s);
@@ -723,7 +747,7 @@ struct B *upload_B( FILE *fp )
 			}
 			//printf("\ntoken %s", token);
 			//exit(0);
-		}while(fgets(line, LINE_SIZE, fp)!=NULL); //if none of the if's hit. i.e. if there isn't an error
+		}while((read=getline(&line, &linesize, fp))!=-1); //if none of the if's hit. i.e. if there isn't an error
 		//and if there isn't a "struct A", keep moving through the lines
 	//}
 	
@@ -749,10 +773,10 @@ struct C *upload_C( FILE *fp )
 	objC=malloc(sizeof(struct C));
 	memset(objC, 0, sizeof(struct C));
 
-	char *sname, *obj_id, *name, *value, *token;
-	char s[2]=" ", line[LINE_SIZE], line_orig[LINE_SIZE];
+	char *sname, *obj_id, *name, *value, *token, *line;
+	char s[2]=" ", line_orig[LINE_SIZE], read, linesize=LINE_SIZE;
 	int lineone=0, fieldcount = 0, Cfields=7;
-
+	line=malloc(LINE_SIZE);
 	memset(line, 0, LINE_SIZE);
 	//check fp validity
 	if(fp==NULL){
@@ -765,7 +789,7 @@ struct C *upload_C( FILE *fp )
 	}
 	
 	//get the first line in the file
-	fgets(line, LINE_SIZE, fp);
+	getline(&line, &linesize, fp);
 	lineone=1;
 
 		do{
@@ -811,7 +835,7 @@ struct C *upload_C( FILE *fp )
 			if(strcmp(sname, "C") == 0 && strcmp(token, "struct")==0){
 				//get the next line, should be field
 				memset(line, 0, LINE_SIZE);
-				while(fgets(line, LINE_SIZE, fp)){
+				while(getline(&line, &linesize, fp)){
 					token=strtok(line, s);
 					name = strtok(NULL, s);
 					value = strtok(NULL, s);
@@ -887,7 +911,7 @@ struct C *upload_C( FILE *fp )
 					}
 				}
 			}
-		}while(fgets(line, LINE_SIZE, fp)); //if none of the if's hit. i.e. if there isn't an error
+		}while((read=getline(&line, &linesize, fp))!=-1); //if none of the if's hit. i.e. if there isn't an error
 		//and if there isn't a "struct A", keep moving through the lines
 	//} 
 	return objC;
