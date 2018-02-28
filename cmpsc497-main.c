@@ -289,18 +289,20 @@ int authenticate_user( char *username, char *password )
 int set_object( char *filename, char *username, char *password )
 {
 	
-	int id;
+	int id, size = LINE_SIZE;
 	struct A *objA;
 	objA=malloc(OBJ_LEN);
-	char lineone[LINE_SIZE];
+	char *lineone;
 	char *token;
 	char *check;	
 	unsigned char *usnm = malloc(NAME_LEN);
 	FILE *fp;
 	char s[2] = " ";
 	unsigned char *chid = malloc(KEY_LEN);
+	lineone = malloc(LINE_SIZE);
 	memset(chid, 0, KEY_LEN);
 	memset(usnm, 0, NAME_LEN);
+	memset(lineone, 0, LINE_SIZE);
 
 	if(authenticate_user(username, password)==0){
 		printf("Authorization unsuccessful. Exiting now...\n");
@@ -314,7 +316,8 @@ int set_object( char *filename, char *username, char *password )
 		return 1;
 	}
 
-	fgets(lineone, LINE_SIZE, fp);
+	getline(&lineone, &size, fp);
+	//free(lineone);
 	fclose(fp);
 
 
@@ -434,7 +437,6 @@ struct A *upload_A( FILE *fp , char *filename)
 	
 	memset(objA, 0, sizeof(struct A));
 
-	
 
 	long offset;
 
@@ -466,23 +468,26 @@ struct A *upload_A( FILE *fp , char *filename)
 			//memset(line, '\0', LINE_SIZE);
 			token = strtok(line, s);
 
-
-			if (strcmp(token, "struct") != 0 && lineone==0){
-				printf("Struct is not the first field in input text. Exiting now...\n");
-				return NULL;
+			if(strcmp(token, "\n")==0){//blank line skip
+				continue;
 			}
-			
+
 			//get the struct name
 			sname=strtok(NULL,s);
 			
 			//get the obj ID
 			obj_id=strtok(NULL,s);
-			if(strcmp(token, "\n")==0){//blank line skip
-				continue;
-			}
 
-			// obj_id[(int) strlen(obj_id)-1]='\0';
+			//fixing crash 1
+			//if the first word is not the word field
+			//it should definitely be the word struct
+			if(strcmp(token, "field")!=0)
+			{
+				assert(strcmp(token, "struct")==0);
+			}
 			
+
+			obj_id[(int) strlen(obj_id)-1]='\0';
 			//make sure struct name is legit IF token == struct
 			if(strcmp(token, "struct")==0)
 			{
@@ -493,14 +498,11 @@ struct A *upload_A( FILE *fp , char *filename)
 				}
 				//ensure id is an integer when token == struct
 				//assumption: obj id won't be 0
-			
-				if((atoi(obj_id)==0)) 
-				{
-					printf("Obj id is not an int. Exiting now...\n");
-					return NULL;
-				}
+				//fixing crash 2
+				assert(atoi(obj_id)!=0);
+				assert(strlen(obj_id)==1);
 			}
-			
+
 			
 			//if the second token is A and the first token is "struct"
 			//you can parse the fields
@@ -514,6 +516,8 @@ struct A *upload_A( FILE *fp , char *filename)
 					name = strtok(NULL, s);
 					value = strtok(NULL, s);
 					value[strlen(value)-1]='\0';
+					assert(strcmp(token, "field")==0);
+					assert(strcmp(name, "num_a")==0||strcmp(name, "num_b")==0||strcmp(name, "string_c")==0||strcmp(name, "string_d")==0||strcmp(name, "ptr_e")==0||strcmp(name, "ptr_f")==0);
 					if(strcmp(token, "field") ==0){
 
 							
@@ -523,22 +527,17 @@ struct A *upload_A( FILE *fp , char *filename)
 						if(strcmp(name, "num_a")==0){
 							fieldcount=fieldcount+1;
 
-							if((atoi(value)==0)) 
-							{
-								printf("Num a in A is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
-
 							objA->num_a = atoi(value);
 
 						}
 						else if(strcmp(name,  "num_b")==0){
 							fieldcount=fieldcount+1;
 
-							if((atoi(value)==0)) 
-							{
-								printf("Num b in A is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
 
 							objA->num_b = atoi(value);
@@ -623,12 +622,15 @@ struct B *upload_B( FILE *fp )
 	//get the first line in the file
 	fgets(line, LINE_SIZE, fp);
 	lineone=1;
+	int count =1;
 
 		do{
+			count++;
 
 			//get the first token from the line stored in line
-			
+			//memset(line, '\0', LINE_SIZE);
 			token = strtok(line, s);
+
 			if(strcmp(token, "\n")==0){//blank line skip
 				continue;
 			}
@@ -638,6 +640,15 @@ struct B *upload_B( FILE *fp )
 			
 			//get the obj ID
 			obj_id=strtok(NULL,s);
+
+			//fixing crash 1
+			//if the first word is not the word field
+			//it should definitely be the word struct
+			if(strcmp(token, "field")!=0)
+			{
+				assert(strcmp(token, "struct")==0);
+			}
+
 			obj_id[strlen(obj_id)-1]='\0';
 			//make sure struct name is legit IF token == struct
 			if(strcmp(token, "struct")==0){
@@ -648,16 +659,17 @@ struct B *upload_B( FILE *fp )
 					return NULL;
 				}
 				//ensure id is an integer when token == struct
-			//assumption: obj id won't be 0
-			
-				if((atoi(obj_id)==0)) 
-				{
-					printf("Obj id is not an int. Exiting now...\n");
-					return NULL;
-				}
-			}
+				//assumption: obj id won't be 0
+				//fixing crash 2
+				
+				//assert that obj_id can be converted to an int
+				assert(atoi(obj_id)!= 0 && strlen(obj_id) == 1);
 
-			//if the second token is A and the first token is "struct"
+			}
+			
+
+			
+			//if the second token is B and the first token is "struct"
 			//you can parse the fields
 			if(strncmp(sname, "B", 1) == 0 && strcmp(token, "struct")==0){
 				//get the next line, should be field
@@ -667,7 +679,11 @@ struct B *upload_B( FILE *fp )
 					token=strtok(line, s);
 					name = strtok(NULL, s);
 					value = strtok(NULL, s);
+
+					assert(strcmp(token, "field")==0);
+					assert(strcmp(name, "num_b")==0||strcmp(name, "string_a")==0||strcmp(name, "string_c")==0||strcmp(name, "string_d")==0);
 					value[strlen(value)-1]='\0';
+
 					if(strcmp(token, "field") ==0){
 							
 							//in here you need to check that every field name is hit
@@ -680,10 +696,8 @@ struct B *upload_B( FILE *fp )
 						}
 						else if(strcmp(name,  "num_b")==0){
 							fieldcount=fieldcount+1;
-							if((atoi(value)==0)) 
-							{
-								printf("Num b in B is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
 
 							objB->num_b = atoi(value);
@@ -757,16 +771,27 @@ struct C *upload_C( FILE *fp )
 		do{
 
 			//get the first token from the line stored in line
+			//memset(line, '\0', LINE_SIZE);
 			token = strtok(line, s);
+
 			if(strcmp(token, "\n")==0){//blank line skip
 				continue;
 			}
-			
+
 			//get the struct name
 			sname=strtok(NULL,s);
 			
 			//get the obj ID
 			obj_id=strtok(NULL,s);
+
+			//fixing crash 1
+			//if the first word is not the word field
+			//it should definitely be the word struct
+			if(strcmp(token, "field")!=0)
+			{
+				assert(strcmp(token, "struct")==0);
+			}
+
 			obj_id[strlen(obj_id)-1]='\0';
 			//make sure struct name is legit IF token == struct
 			if(strcmp(token, "struct")==0){
@@ -778,14 +803,9 @@ struct C *upload_C( FILE *fp )
 				//ensure id is an integer when token == struct
 			//assumption: obj id won't be 0
 			
-				if((atoi(obj_id)==0)) 
-				{
-					printf("Obj id is not an int. Exiting now...\n");
-					return NULL;
-				}
+				assert(atoi(obj_id)!=0 && strlen(obj_id)==1);
 			}
-			
-			
+
 			//if the second token is A and the first token is "struct"
 			//you can parse the fields
 			if(strcmp(sname, "C") == 0 && strcmp(token, "struct")==0){
@@ -795,6 +815,8 @@ struct C *upload_C( FILE *fp )
 					token=strtok(line, s);
 					name = strtok(NULL, s);
 					value = strtok(NULL, s);
+					assert(strcmp(token, "field")==0);
+					assert(strcmp(name, "num_b")==0||strcmp(name, "string_a")==0||strcmp(name, "num_c")==0||strcmp(name, "num_d")==0||strcmp(name, "num_e")==0||strcmp(name, "string_f")==0||strcmp(name, "string_g")==0);
 					value[strlen(value)-1]='\0';
 
 						/*
@@ -817,40 +839,31 @@ struct C *upload_C( FILE *fp )
 						}
 						else if(strcmp(name,  "num_b")==0){
 							fieldcount=fieldcount+1;
-							if((atoi(value)==0)) 
-							{
-								printf("Num b in C is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
 
 							objC->num_b = atoi(value);
 						}
 						else if(strcmp(name,  "num_c")==0){
 							fieldcount=fieldcount+1;
-							if((atoi(value)==0)) 
-							{
-								printf("Num d in C is not an int. Exiting now...\n");
-									return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
-
 							objC->num_c = atoi(value);
 						}
 						else if(strcmp(name,  "num_d")==0){
 							fieldcount=fieldcount+1;
-							if((atoi(value)==0)) 
-							{
-								printf("Num d in C is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
 
 							objC->num_d = atoi(value);
 						}
 						else if(strcmp(name,  "num_e")==0){
 							fieldcount=fieldcount+1;
-							if((atoi(value)==0)) 
-							{
-								printf("Num e in C is not an int. Exiting now...\n");
-								return NULL;
+							if(strcmp(value, "0")!=0){
+								assert(atoi(value) != 0);
 							}
 
 							objC->num_e = atoi(value);
